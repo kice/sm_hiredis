@@ -74,7 +74,7 @@ ASyncRedis::~ASyncRedis()
     }
 
     if (!disconnected && ac) {
-        redisAsyncFree(ac);
+        redisAsyncDisconnect(ac);
     }
 }
 
