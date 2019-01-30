@@ -32,24 +32,19 @@ static inline redisReply *CopyReply(redisReply *src)
     return reply;
 }
 
-void SMASyncRedis::CmdCallback(const redisAsyncContext *c, void *r, void *privdata)
+static void _cmdcb(void *data)
 {
-    if (privdata) {
-        CmdCBData *data = (CmdCBData *)privdata;
-        data->reply = CopyReply((redisReply *)r);
-
-        OutputDebugString(std::to_string((int)data->reply).c_str());
-
-        g_HiredisExt.RequestFrame(std::bind(&SMASyncRedis::_cmdcb, this, std::placeholders::_1), privdata);
-    }
-}
-
-void SMASyncRedis::_cmdcb(void *data)
-{
-    CmdCBData *d = (CmdCBData *)data;
+    CBData *d = (CBData *)data;
     IPluginFunction *cb = d->callback;
     if (cb->IsRunnable()) {
         HandleSecurity sec(d->identity, myself->GetIdentity());
+
+        void *obj;
+        int err = handlesys->ReadHandle(d->handle, g_AsyncRedisCtxType, &sec, &obj);
+        if (err != HandleError_None || obj == nullptr) {
+            delete d;
+            return;
+        }
 
         RedisReply *reply = new RedisReply();
         reply->reply = d->reply;
@@ -62,7 +57,7 @@ void SMASyncRedis::_cmdcb(void *data)
             return;
         }
 
-        cb->PushCell(handle);
+        cb->PushCell(d->handle);
         cb->PushCell(qh);
         cb->PushCell(d->data);
         cb->Execute(nullptr);
@@ -74,36 +69,62 @@ void SMASyncRedis::_cmdcb(void *data)
     delete data;
 }
 
+void SMASyncRedis::CmdCallback(const redisAsyncContext *c, void *r, void *privdata)
+{
+    if (privdata) {
+        CBData *data = (CBData *)privdata;
+        data->reply = CopyReply((redisReply *)r);
+
+        g_HiredisExt.RequestFrame(_cmdcb, privdata);
+    }
+}
+
+static void _connectcb(void *data)
+{
+    CBData *d = (CBData *)data;
+    IPluginFunction *cb = d->callback;
+    if (cb && cb->IsRunnable()) {
+        HandleSecurity sec;
+        sec.pOwner = NULL;
+        sec.pIdentity = myself->GetIdentity();
+        void *obj;
+        int err = handlesys->ReadHandle(d->handle, g_AsyncRedisCtxType, &sec, &obj);
+        if (err != HandleError_None || obj == nullptr) {
+            delete d;
+            return;
+        }
+
+        cb->PushCell(d->handle);
+        cb->PushCell(d->status);
+        cb->PushCell(d->data);
+        cb->Execute(nullptr);
+    }
+
+    delete d;
+}
+
 void SMASyncRedis::ConnectCallback(int status)
 {
     ASyncRedis::ConnectCallback(status);
-    g_HiredisExt.RequestFrame(std::bind(&SMASyncRedis::_connectcb, this, std::placeholders::_1), (void *)status);
-}
 
-void SMASyncRedis::_connectcb(void *data)
-{
-    int status = (int)data;
-    if (connectedCb && connectedCb->IsRunnable()) {
-        connectedCb->PushCell(handle);
-        connectedCb->PushCell(status);
-        connectedCb->PushCell(connectData);
-        connectedCb->Execute(nullptr);
-    }
+    CBData *cbdata = new CBData();
+    cbdata->handle = handle;
+    cbdata->callback = connectedCb;
+    cbdata->data = connectData;
+    cbdata->status = status;
+
+    g_HiredisExt.RequestFrame(_connectcb, (void *)cbdata);
 }
 
 void SMASyncRedis::DisconnectCallback(int status)
 {
     ASyncRedis::DisconnectCallback(status);
-    g_HiredisExt.RequestFrame(std::bind(&SMASyncRedis::_disconnectcb, this, std::placeholders::_1), (void *)status);
-}
 
-void SMASyncRedis::_disconnectcb(void *data)
-{
-    int status = (int)data;
-    if (disconnectedCb && disconnectedCb->IsRunnable()) {
-        disconnectedCb->PushCell(handle);
-        disconnectedCb->PushCell(status);
-        disconnectedCb->PushCell(disconnectData);
-        disconnectedCb->Execute(nullptr);
-    }
+    CBData *cbdata = new CBData();
+    cbdata->handle = handle;
+    cbdata->callback = disconnectedCb;
+    cbdata->data = disconnectData;
+    cbdata->status = status;
+
+    g_HiredisExt.RequestFrame(_connectcb, (void *)cbdata);
 }

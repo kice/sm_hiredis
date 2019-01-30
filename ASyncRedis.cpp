@@ -52,9 +52,9 @@ ASyncRedis::ASyncRedis(int _intval, int cache)
     cache_size = cache;
 
     loop = aeCreateEventLoop(1024 * 10);
-    evMain = std::thread([this] {
-        aeCreateTimeEvent(loop, interval, timeEventCallback, this, nullptr);
+    aeCreateTimeEvent(loop, interval, timeEventCallback, this, nullptr);
 
+    evMain = std::thread([this] {
         aeMain(loop);
         aeDeleteEventLoop(loop);
         loop = nullptr;
@@ -65,20 +65,17 @@ ASyncRedis::ASyncRedis(int _intval, int cache)
 
 ASyncRedis::~ASyncRedis()
 {
-    redisAsyncDisconnect(ac);
-
     if (loop) {
         aeStop(loop);
-        if (evMain.joinable()) {
-            evMain.join();
-        }
     }
-    loop = nullptr;
 
-    if (ac) {
+    if (evMain.joinable()) {
+        evMain.join();
+    }
+
+    if (!disconnected && ac) {
         redisAsyncFree(ac);
     }
-    ac = nullptr;
 }
 
 bool ASyncRedis::WaitForConnected()

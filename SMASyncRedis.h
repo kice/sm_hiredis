@@ -19,17 +19,19 @@ extern "C" {
 #include <vector>
 #include <functional>
 
+struct CBData
+{
+    Handle_t handle;
+    int status;
+    IPluginFunction *callback;
+    IdentityToken_t *identity;
+    redisReply *reply;
+    cell_t data;
+};
+
 class SMASyncRedis :public ASyncRedis
 {
 public:
-    struct CmdCBData
-    {
-        IPluginFunction *callback;
-        IdentityToken_t *identity;
-        redisReply *reply;
-        cell_t data;
-    };
-
     SMASyncRedis(int intval = 1000, int cache_size = 32) :ASyncRedis(intval, cache_size) {}
 
     IPluginFunction *connectedCb;
@@ -41,11 +43,7 @@ public:
     Handle_t handle;
 
     void CmdCallback(const redisAsyncContext *c, void *r, void *privdata);
-    void _cmdcb(void *data);
 
     void ConnectCallback(int status);
-    void _connectcb(void *data);
-
     void DisconnectCallback(int status);
-    void _disconnectcb(void *data);
 };

@@ -364,7 +364,8 @@ static cell_t native_redisAsyncCommandEx(IPluginContext *pContext, const cell_t 
         }
     }
 
-    SMASyncRedis::CmdCBData *cbdata = new SMASyncRedis::CmdCBData();
+    CBData *cbdata = new CBData();
+    cbdata->handle = params[1];
     cbdata->callback = pContext->GetFunctionById(params[2]);
     cbdata->data = params[3];
     cbdata->identity = pContext->GetIdentity();

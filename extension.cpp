@@ -112,13 +112,6 @@ void HiredisExt::SDK_OnUnload()
     handlesys->RemoveType(g_AsyncRedisCtxType, myself->GetIdentity());
 }
 
-//void HiredisExt::AddCallback(IPluginFunction * callback, std::vector<std::tuple<DataType, cell_t>> params)
-//{
-//    if (callback) {
-//        cblist.enqueue({ callback, params });
-//    }
-//}
-
 void HiredisExt::RequestFrame(std::function<void(void * data)> cb, void *data)
 {
     cblist.enqueue({ cb, data });
