@@ -100,7 +100,9 @@ methodmap Redis < Handle
     /**
      * Error flags, 0 when there is no error
      */
-    public native int GetError();
+    property int Error {
+        public native get();
+    }
 
     /**
      * String representation of error when applicable
@@ -112,51 +114,52 @@ methodmap Redis < Handle
     public native bool EnableKeepAlive();
 }
 
-typedef RedisAsyncConnectCallback = function void(RedisAsync ac, int status, any data);
-typedef RedisAsyncDisconnectCallback = function void(RedisAsync ac, int status, any data);
-
 typedef RedisAsyncCommandCallback = function void(RedisAsync ac, RedisReply reply, any data);
 
 methodmap RedisAsync < Handle
 {
     /**
-     * Create a RedisAsync connection. Each object has its own worker thread for processing data.
-     * @param intval        How long should worker wait between each check for new command
-     * @param cache_size    Cache size for dumping replies for callback
+     * Create a new redis client
+     *
+     * @param piped_cache   The number of command put to pipeline before commit
+     *                      0: manully commit, 1: disable pipeline (commit when available)
+     *
+     * @param pipeline_timeout  The maximum time to spend waiting for pipeline to be filled in ms
+     *                          0: wait for piped_cache number of command to be filled.
+     *                          DONT recommend set time to 0, since the worker will wait forever
+     *                          until receive enough command (if you use future you will get a deadlock)
+     *
      */
-    public native RedisAsync(int intval = 1000, int cache_size = 32);
+    public native RedisAsync(int piped_cache = 0, int pipeline_timeout = 0);
 
     /**
-     * Setup an connection to the server. ALL REDIS OBJECTS CANNOT BE REUSE.
-     * You need to close the handle and create a new if you encounter any error.
+     * Setup an connection to the server.
      */
-    public native bool Connect(const char[] ip, int port);
+    public native bool Connect(const char[] ip, int port = 6379, int timeout = 1500);
 
-    public native bool ConnectBind(const char[] ip, int port, const char[] source_addr);
+    property bool IsConnected {
+        public native get();
+    }
 
-    /**
-     * ConnectCallback must be set before calling `Connect` or it might never be called.
-     */
-    public native bool SetConnectCallback(RedisAsyncConnectCallback callback, any data = 0);
-
-    /**
-     * Same as `SetConnectCallback()`. But closing the handle cannot guarantee this callback will be called.
-     * Use redis command `QUIT` will call this function with status = REDIS_ERROR;
-     */
-    public native bool SetDisconnectCallback(RedisAsyncDisconnectCallback callback, any data = 0);
-
-    /**
-     * Send an asynchronously command to redis server without getting the reply.
-     */
-    public native bool Command(const char[] format, any ...);
+    // this will be called after deleting `RedisAsync`
+    public native void Disconnect();
 
     /**
      * Send an asynchronously command to redis server, and callback with reply.
-     * This function will copy the reply to new memoery, it might be slightly slower than `Command()`
      */
-    public native bool CommandEx(RedisAsyncCommandCallback callback, any data, const char[] format, any ...);
+    public native RedisAsync Append(RedisAsyncCommandCallback callback, any data, const char[] format, any ...);
 
-    public native int GetError();
+    /**
+     * Send an asynchronously command to redis server, but dont return until got the reply, like blocking-api.
+     */
+    public native RedisReply Command(const char[] format, any ...);
+
+    // This function will force worker to commit existing command when pipeline was enabled
+    public native RedisAsync Commit();
+
+    property int Error {
+        public native get();
+    }
 
     public native int GetErrorString(char[] buf, int maxlen);
 }

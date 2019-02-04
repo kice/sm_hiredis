@@ -557,7 +557,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <IgnoreSpecificDefaultLibraries>LIBC;LIBCD;LIBCMT;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -1250,9 +1250,7 @@ copy /Y "$(OutDir)$(TargetName).pdb" "D:\steamcmd\steamapps\common\Counter-Strik
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\adlist.c" />
-    <ClCompile Include="..\ae.c" />
-    <ClCompile Include="..\ASyncRedis.cpp" />
+    <ClCompile Include="..\client.cpp" />
     <ClCompile Include="..\extension.cpp" />
     <ClCompile Include="..\..\smsdk_ext.cpp" />
     <ClCompile Include="..\natives.cpp" />
@@ -1260,9 +1258,8 @@ copy /Y "$(OutDir)$(TargetName).pdb" "D:\steamcmd\steamapps\common\Counter-Strik
     <ClCompile Include="..\win32fixes.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\adlist.h" />
-    <ClInclude Include="..\ae.h" />
-    <ClInclude Include="..\ASyncRedis.h" />
+    <ClInclude Include="..\blockingconcurrentqueue.h" />
+    <ClInclude Include="..\client.h" />
     <ClInclude Include="..\concurrentqueue.h" />
     <ClInclude Include="..\extension.h" />
     <ClInclude Include="..\SMASyncRedis.h" />

@@ -31,6 +31,23 @@
 
 #include "extension.h"
 
+#include <string>
+#include <sstream>
+#include <vector>
+
+template<class _Elem, class _Traits, class _Alloc>
+inline std::vector<std::basic_string<_Elem, _Traits, _Alloc>> split(
+    const std::basic_string<_Elem, _Traits, _Alloc>& _Str, const _Elem _Delim)
+{
+    std::vector<std::basic_string<_Elem, _Traits, _Alloc>> elems;
+    std::basic_stringstream<_Elem, _Traits, _Alloc> ss(_Str);
+    std::basic_string<_Elem, _Traits, _Alloc> item;
+    while (std::getline(ss, item, _Delim)) {
+        elems.push_back(item);
+    }
+    return elems;
+}
+
 template <typename T>
 static bool ReadHandle(const cell_t handle, HandleType_t type, T** obj, IPluginContext *pContext)
 {
@@ -52,6 +69,11 @@ static bool ReadHandle(const cell_t handle, HandleType_t type, T** obj, IPluginC
     }
 
     return true;
+}
+
+static inline std::vector<std::string> formatCommand(const std::string &cmd)
+{
+    return split(cmd, ' ');
 }
 
 static inline void *redisBlockForReply(redisContext *c)
@@ -286,47 +308,58 @@ static cell_t native_redisAsyncConnect(IPluginContext *pContext, const cell_t *p
 
     char *ip;
     pContext->LocalToString(params[2], &ip);
-    return ctx->Connect(ip, params[3]);
+    return ctx->Connect(ip, params[3], params[4]);
 }
 
-static cell_t native_redisAsyncConnectBind(IPluginContext *pContext, const cell_t *params)
+static cell_t native_redisAsyncIsConnected(IPluginContext *pContext, const cell_t *params)
 {
     SMASyncRedis *ctx = nullptr;
-    if (!ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
-        return 0;
+    if (ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
+        return ctx->IsConnected();
     }
-
-    char *ip, *source_addr;
-    pContext->LocalToString(params[2], &ip);
-    pContext->LocalToString(params[4], &source_addr);
-
-    return ctx->ConnectBind(ip, params[3], source_addr);
-}
-
-static cell_t native_redisAsyncSetConnectCallback(IPluginContext *pContext, const cell_t *params)
-{
-    SMASyncRedis *ctx = nullptr;
-    if (!ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
-        return 0;
-    }
-
-    IPluginFunction *callback = pContext->GetFunctionById(params[2]);
-    ctx->connectedCb = callback;
-    ctx->connectData = params[3];
     return 0;
 }
 
-static cell_t native_redisAsyncSetDisconnectCallback(IPluginContext *pContext, const cell_t *params)
+static cell_t native_redisAsyncDisconnect(IPluginContext *pContext, const cell_t *params)
+{
+    SMASyncRedis *ctx = nullptr;
+    if (ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
+        ctx->Disconnect();
+    }
+    return 0;
+}
+
+static cell_t native_redisAsyncAppend(IPluginContext *pContext, const cell_t *params)
 {
     SMASyncRedis *ctx = nullptr;
     if (!ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
         return 0;
     }
 
-    IPluginFunction *callback = pContext->GetFunctionById(params[2]);
-    ctx->disconnectedCb = callback;
-    ctx->disconnectData = params[3];
-    return 0;
+    char buffer[1024];
+    {
+        DetectExceptions eh(pContext);
+        g_pSM->FormatString(buffer, sizeof(buffer), pContext, params, 4);
+        if (eh.HasException()) {
+            return 0;
+        }
+    }
+
+    auto cb = pContext->GetFunctionById(params[2]);
+    if (cb->IsRunnable()) {
+        CBData *cbdata = new CBData();
+        cbdata->handle = params[1];
+        cbdata->callback = cb;
+        cbdata->data = params[3];
+        cbdata->identity = pContext->GetIdentity();
+
+        ctx->Append(formatCommand(buffer), [=](void *reply) {
+            ctx->CmdCallback(reply, cbdata);
+        });
+    } else {
+        ctx->Append(formatCommand(buffer));
+    }
+    return params[1];
 }
 
 static cell_t native_redisAsyncCommand(IPluginContext *pContext, const cell_t *params)
@@ -345,40 +378,41 @@ static cell_t native_redisAsyncCommand(IPluginContext *pContext, const cell_t *p
         }
     }
 
-    return ctx->Command(buffer);
-}
+    Handle_t handle = 0;
 
-static cell_t native_redisAsyncCommandEx(IPluginContext *pContext, const cell_t *params)
-{
-    SMASyncRedis *ctx = nullptr;
-    if (!ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
-        return 0;
-    }
+    auto reply = ctx->Command<redisReply>(formatCommand(buffer)).get();
+    if (reply) {
+        RedisReply *r = new RedisReply();
+        r->reply = reply;
 
-    char buffer[1024];
-    {
-        DetectExceptions eh(pContext);
-        g_pSM->FormatString(buffer, sizeof(buffer), pContext, params, 4);
-        if (eh.HasException()) {
+        HandleError error = HandleError_None;
+        handle = handlesys->CreateHandle(g_RedisReplyType, r, pContext->GetIdentity(), myself->GetIdentity(), &error);
+
+        if (!handle || error != HandleError_None) {
+            pContext->ReportError("Allocation of RedisReply handle failed, error code #%d", error);
             return 0;
         }
     }
+    return handle;
+}
 
-    CBData *cbdata = new CBData();
-    cbdata->handle = params[1];
-    cbdata->callback = pContext->GetFunctionById(params[2]);
-    cbdata->data = params[3];
-    cbdata->identity = pContext->GetIdentity();
-    return ctx->Command(buffer, std::bind(&SMASyncRedis::CmdCallback, ctx, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3), cbdata);
+static cell_t native_redisAsyncCommit(IPluginContext *pContext, const cell_t *params)
+{
+    SMASyncRedis *ctx = nullptr;
+    if (ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
+        ctx->Commit();
+        return params[1];
+    }
+    return 0;
 }
 
 static cell_t native_redisAsyncGetError(IPluginContext *pContext, const cell_t *params)
 {
     SMASyncRedis *ctx = nullptr;
     if (!ReadHandle(params[1], g_AsyncRedisCtxType, &ctx, pContext)) {
-        return 0;
+        return -1;
     }
-    return ctx->GetContext()->err;
+    return ctx->GetError();
 }
 
 static cell_t native_redisAsyncGetErrorStr(IPluginContext *pContext, const cell_t *params)
@@ -389,7 +423,7 @@ static cell_t native_redisAsyncGetErrorStr(IPluginContext *pContext, const cell_
     }
 
     size_t numWritten = 0;
-    pContext->StringToLocalUTF8(params[2], params[3], ctx->GetContext()->errstr, &numWritten);
+    pContext->StringToLocalUTF8(params[2], params[3], ctx->GetErrorString(), &numWritten);
     return numWritten;
 }
 
@@ -486,7 +520,7 @@ sp_nativeinfo_t g_RedisNatives[] =
     { "Redis.GetReply",             native_redisGetReply },
     { "Redis.AppendCommand",        native_redisAppendCommand },
     { "Redis.Command",              native_redisCommand },
-    { "Redis.GetError",             native_redisGetError },
+    { "Redis.Error.get",            native_redisGetError },
     { "Redis.GetErrorString",       native_redisGetErrorStr },
     { "Redis.SetTimeout",           native_redisSetTimeout },
     { "Redis.EnableKeepAlive",      native_redisEnableKeepAlive },
@@ -494,12 +528,12 @@ sp_nativeinfo_t g_RedisNatives[] =
     // non-blocking connection
     { "RedisAsync.RedisAsync",              native_redisAsync },
     { "RedisAsync.Connect",                 native_redisAsyncConnect },
-    { "RedisAsync.ConnectBind",             native_redisAsyncConnectBind },
-    { "RedisAsync.SetConnectCallback",      native_redisAsyncSetConnectCallback },
-    { "RedisAsync.SetDisconnectCallback",   native_redisAsyncSetDisconnectCallback },
+    { "RedisAsync.IsConnected.get",         native_redisAsyncIsConnected },
+    { "RedisAsync.Disconnect",              native_redisAsyncDisconnect },
+    { "RedisAsync.Append",                  native_redisAsyncAppend },
     { "RedisAsync.Command",                 native_redisAsyncCommand },
-    { "RedisAsync.CommandEx",               native_redisAsyncCommandEx },
-    { "RedisAsync.GetError",                native_redisAsyncGetError },
+    { "RedisAsync.Commit",                  native_redisAsyncCommit },
+    { "RedisAsync.Error.get",               native_redisAsyncGetError },
     { "RedisAsync.GetErrorString",          native_redisAsyncGetErrorStr },
 
     // Reply API

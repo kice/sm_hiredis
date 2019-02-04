@@ -11,13 +11,15 @@ extern "C" {
 #endif
 }
 
-#include "ASyncRedis.h"
+#include "client.h"
 
 #include "smsdk_ext.h"
 #include "concurrentqueue.h"
 
 #include <vector>
 #include <functional>
+
+struct redisReply;
 
 struct CBData
 {
@@ -29,21 +31,13 @@ struct CBData
     cell_t data;
 };
 
-class SMASyncRedis :public ASyncRedis
+class SMASyncRedis :public async_redis::client
 {
 public:
-    SMASyncRedis(int intval = 1000, int cache_size = 32) :ASyncRedis(intval, cache_size) {}
-
-    IPluginFunction *connectedCb;
-    IPluginFunction *disconnectedCb;
-
-    cell_t connectData;
-    cell_t disconnectData;
+    SMASyncRedis(size_t piped_cache = 0, uint32_t pipeline_timeout = 0) 
+        : async_redis::client(piped_cache, pipeline_timeout) {}
 
     Handle_t handle;
 
-    void CmdCallback(const redisAsyncContext *c, void *r, void *privdata);
-
-    void ConnectCallback(int status);
-    void DisconnectCallback(int status);
+    void CmdCallback(void *r, void *privdata);
 };

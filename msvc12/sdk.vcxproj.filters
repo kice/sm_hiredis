@@ -30,16 +30,10 @@
     <ClCompile Include="..\win32fixes.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\ae.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\adlist.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ASyncRedis.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\SMASyncRedis.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\client.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -53,19 +47,16 @@
     <ClInclude Include="..\..\smsdk_ext.h">
       <Filter>SourceMod SDK</Filter>
     </ClInclude>
-    <ClInclude Include="..\ae.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\adlist.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\ASyncRedis.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\concurrentqueue.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\SMASyncRedis.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\client.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\blockingconcurrentqueue.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

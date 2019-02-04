@@ -69,7 +69,7 @@ static void _cmdcb(void *data)
     delete data;
 }
 
-void SMASyncRedis::CmdCallback(const redisAsyncContext *c, void *r, void *privdata)
+void SMASyncRedis::CmdCallback(void *r, void *privdata)
 {
     if (privdata) {
         CBData *data = (CBData *)privdata;
@@ -101,30 +101,4 @@ static void _connectcb(void *data)
     }
 
     delete d;
-}
-
-void SMASyncRedis::ConnectCallback(int status)
-{
-    ASyncRedis::ConnectCallback(status);
-
-    CBData *cbdata = new CBData();
-    cbdata->handle = handle;
-    cbdata->callback = connectedCb;
-    cbdata->data = connectData;
-    cbdata->status = status;
-
-    g_HiredisExt.RequestFrame(_connectcb, (void *)cbdata);
-}
-
-void SMASyncRedis::DisconnectCallback(int status)
-{
-    ASyncRedis::DisconnectCallback(status);
-
-    CBData *cbdata = new CBData();
-    cbdata->handle = handle;
-    cbdata->callback = disconnectedCb;
-    cbdata->data = disconnectData;
-    cbdata->status = status;
-
-    g_HiredisExt.RequestFrame(_connectcb, (void *)cbdata);
 }
